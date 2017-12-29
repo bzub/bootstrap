@@ -114,28 +114,29 @@ func flashWindows(imgPath, disk string) error {
 	var b [64 * 1024]byte
 	fmt.Printf("\n")
 	for o := int64(0); ; {
-		n, err := fi.Read(b[:])
-		if err == io.EOF {
+		n, errr := fi.Read(b[:])
+		if n != 0 {
+			nw, errw := syscall.Write(fd, b[:n])
+			if errw != nil {
+				return fmt.Errorf("failed to write %s: %v", disk, err2)
+			}
+			if nw != n {
+				return errors.New("buffer underflow")
+			}
+			o += int64(nw)
+			fmt.Printf("\r%.1f%%", float64(o)*100./s)
+		}
+		if errr == io.EOF {
 			break
 		}
-		if err != nil {
-			return fmt.Errorf("failed to read %s: %v", imgPath, err)
+		if errr != nil {
+			return fmt.Errorf("failed to read %s: %v", imgPath, errr)
 		}
-		nw, err := syscall.Write(fd, b[:n])
-		if err != nil {
-			return fmt.Errorf("failed to write %s: %v", disk, err)
-		}
-		if nw != n {
-			return errors.New("buffer underflow")
-		}
-		o += int64(nw)
-		fmt.Printf("\r%.1f%%", float64(o)*100./s)
 	}
 	fmt.Printf("\r100.0%%\n")
 	// Refresh partition table.
 	// https://msdn.microsoft.com/en-us/library/windows/desktop/aa365192.aspx
-	err = syscall.DeviceIoControl(fd, ioctlDiskUpdateProperties, nil, 0, nil, 0, &dummy, nil)
-	if err != nil {
+	if err = syscall.DeviceIoControl(fd, ioctlDiskUpdateProperties, nil, 0, nil, 0, &dummy, nil); err != nil {
 		return fmt.Errorf("failed to refresh partition table on %s: %v", disk, err)
 	}
 	closed = true

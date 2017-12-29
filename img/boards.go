@@ -385,6 +385,7 @@ end:
 	return url, imgFile
 }
 
+// fetchURL retrieves a file and buffers it into memory.
 func fetchURL(url string) ([]byte, error) {
 	r, err := http.DefaultClient.Get(url)
 	if err != nil {
@@ -393,6 +394,24 @@ func fetchURL(url string) ([]byte, error) {
 	defer r.Body.Close()
 	if r.StatusCode != 200 {
 		return nil, fmt.Errorf("Failed to fetch %q: status %d", url, r.StatusCode)
+	}
+	// Only display progress if it's large enough.
+	if r.ContentLength > 1024*1024 {
+		var reply []byte
+		var buf [64 * 1024]byte
+		for {
+			n, err := r.Body.Read(buf[:])
+			reply = append(reply, buf[:n]...)
+			fmt.Printf("\r%.1f%%", float64(len(reply))*100./float64(r.ContentLength))
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+		fmt.Printf("\r100.0%%\n")
+		return reply, nil
 	}
 	reply, err := ioutil.ReadAll(r.Body)
 	if err != nil {

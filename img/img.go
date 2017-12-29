@@ -289,6 +289,8 @@ func getHome() string {
 
 func ddFlash(imgPath, dst string) error {
 	fmt.Printf("- Flashing (takes 2 minutes)\n")
+	// TODO(maruel): Use progress, but it gets in the way with sudo password
+	// prompt.
 	// OSX uses 'M' but Ubuntu uses 'm' but using numbers works everywhere.
 	if err := run("sudo", "dd", fmt.Sprintf("bs=%d", 4*1024*1024), "if="+imgPath, "of="+dst); err != nil {
 		return err
@@ -303,10 +305,34 @@ func ddFlash(imgPath, dst string) error {
 	}
 	// This step may take a while for writeback cache.
 	fmt.Printf("- Flushing I/O cache\n")
+	p := make(progress)
+	p.start()
+	defer p.stop()
 	if err := run("sudo", "sync"); err != nil {
 		return err
 	}
 	return nil
+}
+
+type progress chan struct{}
+
+func (p *progress) start() {
+	go func() {
+		t := time.Tick(3 * time.Second)
+		dot := []byte{'.'}
+		for {
+			select {
+			case <-*p:
+				return
+			case <-t:
+				os.Stderr.Write(dot)
+			}
+		}
+	}()
+}
+
+func (p *progress) stop() {
+	*p <- struct{}{}
 }
 
 // Linux
